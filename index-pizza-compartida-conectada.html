@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lista de Compras para Pizza</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{--bg:#fefcf8;--card:#fff;--text:#0f172a;--muted:#64748b;--accent:#ea580c;--accent-soft:rgba(234,88,12,.14);--green:#16a34a;--green-soft:rgba(22,163,74,.14);--border:rgba(15,23,42,.09)}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(900px 500px at 85% -10%,var(--accent-soft),transparent 60%),var(--bg);color:var(--text);font-family:'Quicksand',sans-serif}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,.04)}
+.btn{border-radius:10px;padding:9px 13px;font-weight:700;font-size:13px;cursor:pointer;transition:.15s;border:1px solid var(--border);background:#fff}
+.btn:hover{transform:translateY(-1px)}.primary{background:var(--accent);color:white;border-color:var(--accent)}.primary:hover{background:#c2410c}.danger{color:#b91c1c;border-color:#fecaca}.muted{color:var(--muted)}
+.item{display:grid;grid-template-columns:32px minmax(110px,2fr) minmax(95px,1fr) 90px 44px;gap:10px;align-items:center;padding:12px;border-bottom:1px solid var(--border)}
+.item:last-child{border-bottom:0}.item.done{background:var(--green-soft)}.item.done .name{text-decoration:line-through;color:var(--muted)}
+.item input{min-width:0;width:100%;padding:7px 8px;border:1px solid var(--border);border-radius:8px;background:#fff;font:inherit;font-size:13px}
+.item input:focus{outline:2px solid var(--accent-soft);border-color:var(--accent)}
+.check{width:23px;height:23px;border:2px solid #cbd5e1;border-radius:50%;background:white;cursor:pointer;color:white;font-weight:bold}.done .check{background:var(--green);border-color:var(--green)}
+.tab{border-radius:99px;padding:7px 13px;border:1px solid var(--border);background:#fff;color:var(--muted);font-weight:700;font-size:13px;cursor:pointer}.tab.active{background:var(--accent-soft);color:var(--text);border-color:var(--accent)}
+#notice{font-size:13px}.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#f59e0b;margin-right:6px}.status-dot.online{background:#16a34a}
+@media(max-width:620px){.item{grid-template-columns:28px minmax(0,1.5fr) minmax(85px,1fr);gap:7px;padding:10px}.item .price{grid-column:2}.item .delete{grid-column:3;grid-row:2;justify-self:end}.item .qty{grid-column:3;grid-row:1}.item .name{grid-column:2;grid-row:1}.item .price input{max-width:110px}.item .check{grid-column:1;grid-row:1}.item .name::before{content:'Ingrediente';display:block;font-size:10px;color:var(--muted);margin-bottom:3px}.item .qty::before{content:'Cantidad';display:block;font-size:10px;color:var(--muted);margin-bottom:3px}.item .price::before{content:'Precio (MXN)';display:block;font-size:10px;color:var(--muted);margin-bottom:3px}}
+</style>
+</head>
+<body>
+<main class="max-w-4xl mx-auto px-4 py-7">
+  <header class="mb-6">
+    <h1 class="text-3xl font-bold mb-2">🍕 Lista de Compras para Pizza</h1>
+    <p class="muted text-sm">Todos pueden agregar, editar, marcar y eliminar ingredientes. Los cambios se comparten por Internet.</p>
+  </header>
+
+  <section class="card p-5 mb-5">
+    <div class="flex justify-between items-center gap-3 mb-2">
+      <span class="muted text-xs font-bold uppercase tracking-widest">Progreso de surtido</span>
+      <strong id="progressText" style="color:var(--accent)">0 / 11 · 0%</strong>
+    </div>
+    <div class="h-2.5 rounded-full overflow-hidden mb-4" style="background:#e2e8f0"><div id="progressBar" style="height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--green));transition:width .25s"></div></div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div class="rounded-xl p-3" style="background:var(--accent-soft)"><div class="muted text-xs font-bold uppercase">Total estimado</div><div class="text-xl font-bold">$<span id="totalCost">767</span> MXN</div></div>
+      <div class="rounded-xl p-3" style="background:var(--green-soft)"><div class="muted text-xs font-bold uppercase">Ya comprado</div><div class="text-xl font-bold" style="color:var(--green)">$<span id="doneCost">0</span> MXN</div></div>
+      <div class="rounded-xl p-3" style="background:rgba(100,116,139,.08)"><div class="muted text-xs font-bold uppercase">Falta por comprar</div><div class="text-xl font-bold">$<span id="pendingCost">767</span> MXN</div></div>
+    </div>
+  </section>
+
+  <section class="flex flex-wrap items-center justify-between gap-3 mb-4">
+    <div class="flex flex-wrap gap-2">
+      <button class="tab active" data-filter="all">Todos <span id="cntAll">11</span></button>
+      <button class="tab" data-filter="pending">Pendientes <span id="cntPending">11</span></button>
+      <button class="tab" data-filter="done">Surtidos <span id="cntDone">0</span></button>
+    </div>
+    <div class="flex flex-wrap gap-2">
+      <button id="exportBtn" class="btn">Exportar</button>
+      <button id="resetBtn" class="btn">Reiniciar surtido</button>
+    </div>
+  </section>
+
+  <section class="card overflow-hidden">
+    <div class="hidden md:grid px-3 py-2 text-xs font-bold uppercase tracking-wide muted" style="grid-template-columns:32px minmax(110px,2fr) minmax(95px,1fr) 90px 44px;gap:10px">
+      <span></span><span>Ingrediente</span><span>Cantidad</span><span>Precio $</span><span></span>
+    </div>
+    <div id="itemsList"></div>
+    <div id="emptyState" class="hidden p-8 text-center muted">No hay ingredientes en esta vista.</div>
+  </section>
+
+  <section class="card p-4 mt-4">
+    <h2 class="font-bold mb-3">➕ Agregar ingrediente</h2>
+    <form id="addForm" class="grid grid-cols-1 sm:grid-cols-4 gap-2">
+      <input id="newName" required maxlength="100" placeholder="Nombre del ingrediente" class="border rounded-lg p-2 text-sm min-w-0">
+      <input id="newQty" maxlength="80" placeholder="Cantidad (ej. 300 g)" class="border rounded-lg p-2 text-sm min-w-0">
+      <input id="newPrice" type="number" min="0" step="0.01" placeholder="Precio en MXN" class="border rounded-lg p-2 text-sm min-w-0">
+      <button class="btn primary" type="submit">Agregar a la lista</button>
+    </form>
+  </section>
+
+  <section class="card p-4 mt-4">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div id="notice" role="status"><span class="status-dot"></span>Conectando con la lista en línea…</div>
+      <button id="saveBtn" class="btn primary" type="button">☁️ Guardar cambios</button>
+    </div>
+    <p class="muted text-xs mt-2">Los cambios se guardan en la base de datos compartida al pulsar Guardar. Otros visitantes recibirán las actualizaciones al sincronizarse.</p>
+  </section>
+  <footer class="text-center muted text-xs mt-6">🍕 Lista compartida · Los cambios afectan a todas las personas que tengan el enlace.</footer>
+</main>
+
+<script>
+(() => {
+  // CONFIGURACIÓN: reemplaza estos dos valores con los de tu proyecto Supabase.
+  // Usa la URL del proyecto y la clave pública "anon" / "publishable".
+  // NUNCA pegues aquí la clave "service_role" o una clave secreta.
+  const SUPABASE_URL = "https://jvotphtjhndhcjomoceu.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_b58I0QjFDi5AgA5Y3yzsGg_hRmpubfm";
+  const STORAGE_ROW_ID = 1;
+
+  const defaults = [
+    {id:"item-0",name:"Masa para Pizza",qty:"1 Kilo",price:63},
+    {id:"item-1",name:"Levadura",qty:"1 bolsita",price:12},
+    {id:"item-2",name:"Salsa para Pizza",qty:"1 empaque",price:25},
+    {id:"item-3",name:"Queso Mozzarella",qty:"300 g",price:60},
+    {id:"item-4",name:"Queso Parmesano",qty:"300 g",price:187},
+    {id:"item-5",name:"Peperoni",qty:"500 g",price:90},
+    {id:"item-6",name:"Chorizo",qty:"Según presupuesto",price:40},
+    {id:"item-7",name:"Jamón",qty:"Según presupuesto",price:20},
+    {id:"item-8",name:"Salchicha",qty:"Según presupuesto",price:20},
+    {id:"item-9",name:"Bistec",qty:"Según presupuesto",price:150},
+    {id:"item-10",name:"Pastor Carne",qty:"Según presupuesto",price:100}
+  ];
+  let items = structuredClone(defaults), done = {}, filter = "all", supabase = null;
+  let connected = false, remoteReady = false, saveTimer = null, lastRemoteUpdate = 0;
+
+  const $ = id => document.getElementById(id);
+  const money = n => (Number(n)||0).toLocaleString("es-MX",{maximumFractionDigits:2});
+  function notice(message, online=false) {
+    $("notice").innerHTML = `<span class="status-dot ${online?"online":""}"></span>${escapeHtml(message)}`;
+  }
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  }
+  function updateStats() {
+    const total = items.reduce((sum,it)=>sum+(Number(it.price)||0),0);
+    const bought = items.filter(it=>done[it.id]).reduce((sum,it)=>sum+(Number(it.price)||0),0);
+    const count = items.filter(it=>done[it.id]).length;
+    const pct = items.length ? Math.round(count/items.length*100) : 0;
+    $("progressText").textContent = `${count} / ${items.length} · ${pct}%`;
+    $("progressBar").style.width = pct+"%";
+    $("totalCost").textContent = money(total); $("doneCost").textContent = money(bought); $("pendingCost").textContent = money(total-bought);
+    $("cntAll").textContent = items.length; $("cntDone").textContent = count; $("cntPending").textContent = items.length-count;
+  }
+  function render() {
+    const visible = items.filter(it => filter==="all" || (filter==="done" ? !!done[it.id] : !done[it.id]));
+    $("itemsList").innerHTML = visible.map(it => `
+      <div class="item ${done[it.id]?"done":""}" data-id="${escapeHtml(it.id)}">
+        <button class="check" data-action="toggle" title="Marcar como surtido" aria-label="Marcar como surtido">${done[it.id]?"✓":""}</button>
+        <div class="name"><input data-field="name" aria-label="Ingrediente" value="${escapeHtml(it.name)}"></div>
+        <div class="qty"><input data-field="qty" aria-label="Cantidad" value="${escapeHtml(it.qty)}"></div>
+        <div class="price"><input data-field="price" aria-label="Precio" type="number" min="0" step="0.01" value="${Number(it.price)||0}"></div>
+        <button class="btn danger delete" data-action="delete" title="Eliminar ingrediente" aria-label="Eliminar ${escapeHtml(it.name)}">✕</button>
+      </div>`).join("");
+    $("emptyState").classList.toggle("hidden", visible.length!==0);
+    document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.filter===filter));
+    updateStats();
+  }
+  function snapshot() { return {items, done}; }
+  async function saveToCloud(showNotice=true) {
+    if (!supabase || !connected) {
+      notice("Falta configurar Supabase. Los cambios no están guardados en Internet.", false);
+      return false;
+    }
+    const {error} = await supabase.from("pizza_lista").upsert({
+      id: STORAGE_ROW_ID, data: snapshot(), updated_at: new Date().toISOString()
+    }, {onConflict:"id"});
+    if (error) {
+      notice("No se pudo guardar: "+error.message, false);
+      return false;
+    }
+    remoteReady = true; lastRemoteUpdate = Date.now();
+    if(showNotice) notice("Cambios guardados en Internet y compartidos.", true);
+    return true;
+  }
+  function scheduleSave() {
+    notice("Cambios pendientes de guardar…", connected);
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(()=>saveToCloud(false), 900);
+  }
+  function applyRemote(data) {
+    if (!data || !Array.isArray(data.items)) return;
+    items = data.items.map((it,i)=>({
+      id:String(it.id || `remote-${i}-${Date.now()}`),
+      name:String(it.name || "Ingrediente"),
+      qty:String(it.qty || ""),
+      price:Math.max(0,Number(it.price)||0)
+    }));
+    done = data.done && typeof data.done==="object" ? data.done : {};
+    render();
+  }
+  async function loadCloud() {
+    const {data,error} = await supabase.from("pizza_lista").select("data").eq("id",STORAGE_ROW_ID).maybeSingle();
+    if(error) { notice("Error al cargar la lista: "+error.message, false); return; }
+    if(data && data.data) {
+      applyRemote(data.data);
+      notice("Lista compartida cargada desde Internet.", true);
+    } else {
+      const {error:insertError} = await supabase.from("pizza_lista").insert({id:STORAGE_ROW_ID,data:snapshot(),updated_at:new Date().toISOString()});
+      if(insertError) {
+        // Otro visitante pudo crear el registro al mismo tiempo; vuelve a leerlo.
+        const reread = await supabase.from("pizza_lista").select("data").eq("id",STORAGE_ROW_ID).maybeSingle();
+        if(reread.data?.data) applyRemote(reread.data.data);
+        else { notice("No se pudo iniciar la lista: "+insertError.message, false); return; }
+      }
+      notice("Lista inicializada y guardada en Internet.", true);
+    }
+    remoteReady = true;
+  }
+  function connect() {
+    if (!window.supabase || SUPABASE_URL.startsWith("PEGA_AQUI") || SUPABASE_ANON_KEY.startsWith("PEGA_AQUI")) {
+      render();
+      notice("Falta conectar Supabase para habilitar el guardado compartido.", false);
+      return;
+    }
+    try {
+      supabase = window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+      connected = true;
+      loadCloud().then(()=>{
+        supabase.channel("pizza-list-live")
+          .on("postgres_changes",{event:"UPDATE",schema:"public",table:"pizza_lista",filter:"id=eq."+STORAGE_ROW_ID},payload=>{
+            if(Date.now()-lastRemoteUpdate<1800) return;
+            if(payload.new?.data) {
+              applyRemote(payload.new.data);
+              notice("Lista sincronizada con los cambios de otra persona.", true);
+            }
+          })
+          .subscribe();
+      });
+    } catch(e) { notice("No se pudo iniciar la conexión con Supabase.", false); }
+  }
+
+  $("itemsList").addEventListener("click", async e => {
+    const button = e.target.closest("button[data-action]");
+    if(!button) return;
+    const row = button.closest("[data-id]"); if(!row) return;
+    const id = row.dataset.id, action = button.dataset.action;
+    if(action==="toggle") { done[id] = !done[id]; if(!done[id]) delete done[id]; render(); scheduleSave(); }
+    if(action==="delete") {
+      const item = items.find(it=>it.id===id);
+      if(!confirm(`¿Eliminar "${item?.name || "este ingrediente"}" de la lista compartida?`)) return;
+      items = items.filter(it=>it.id!==id); delete done[id]; render(); scheduleSave();
+    }
+  });
+  $("itemsList").addEventListener("change", e => {
+    const field = e.target.dataset.field, row = e.target.closest("[data-id]");
+    if(!field || !row) return;
+    const item = items.find(it=>it.id===row.dataset.id); if(!item) return;
+    if(field==="price") item.price = Math.max(0,Number(e.target.value)||0);
+    else item[field] = e.target.value.trim();
+    updateStats(); scheduleSave();
+  });
+  $("itemsList").addEventListener("keydown", e => {
+    if(e.key==="Enter" && e.target.matches("input")) { e.preventDefault(); e.target.blur(); }
+  });
+  $("addForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const name=$("newName").value.trim(); if(!name) return;
+    items.push({id:"item-"+Date.now()+"-"+Math.random().toString(36).slice(2,7),name,qty:$("newQty").value.trim(),price:Math.max(0,Number($("newPrice").value)||0)});
+    $("addForm").reset(); filter="all"; render(); scheduleSave();
+  });
+  document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{filter=b.dataset.filter;render();}));
+  $("saveBtn").addEventListener("click",()=>saveToCloud(true));
+  $("resetBtn").addEventListener("click",()=>{
+    if(!confirm("¿Marcar todos los ingredientes como pendientes? Esto se compartirá con todos.")) return;
+    done={}; render(); scheduleSave();
+  });
+  $("exportBtn").addEventListener("click",()=>{
+    const rows=[["Ingrediente","Cantidad","Precio MXN","Surtido"],...items.map(it=>[it.name,it.qty,it.price,done[it.id]?"Sí":"No"])];
+    const csv=rows.map(row=>row.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",")).join("\r\n");
+    const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="lista-compras-pizza.csv";a.click();URL.revokeObjectURL(a.href);
+  });
+  render(); connect();
+})();
+</script>
+</body>
+</html>
